@@ -41,3 +41,22 @@ class TestMainEntrypoint:
 
         assert result.returncode == 0
         assert "image-stitch 1.1.0" in result.stdout
+
+    def test_help_routes_to_cli_under_cp1252(self):
+        """非 UTF-8 管道编码下，--help 也不应因为中文帮助文本崩溃"""
+        env = dict(__import__("os").environ)
+        env["PYTHONIOENCODING"] = "cp1252"
+
+        result = subprocess.run(
+            [sys.executable, "-m", "image_stitch", "--help"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            encoding="cp1252",
+            errors="replace",
+            env=env,
+            timeout=5,
+        )
+
+        assert result.returncode == 0
+        assert "usage: image-stitch" in result.stdout

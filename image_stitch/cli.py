@@ -15,6 +15,32 @@ from .core.exporter import Exporter, OutputFormat
 from .core.frame_sync import SyncMode
 
 
+class SafeArgumentParser(argparse.ArgumentParser):
+    """
+    在非 UTF-8 终端/管道中安全输出帮助文本。
+
+    Windows CI 的默认编码可能不支持中文，argparse 在打印 help/version
+    时会直接抛 UnicodeEncodeError。这里降级为可编码文本，避免进程失败。
+    """
+
+    def _print_message(self, message, file=None):
+        if not message:
+            return
+
+        if file is None:
+            file = sys.stdout
+
+        try:
+            file.write(message)
+        except UnicodeEncodeError:
+            encoding = getattr(file, "encoding", None) or "utf-8"
+            safe_message = message.encode(encoding, errors="backslashreplace").decode(
+                encoding,
+                errors="strict",
+            )
+            file.write(safe_message)
+
+
 def parse_color(color_str: str) -> Tuple[int, int, int, int]:
     """
     解析颜色字符串
@@ -72,7 +98,7 @@ def create_parser() -> argparse.ArgumentParser:
     返回:
         ArgumentParser 对象
     """
-    parser = argparse.ArgumentParser(
+    parser = SafeArgumentParser(
         prog="image-stitch",
         description="横向拼接图片工具，支持静态和动态图片",
         formatter_class=argparse.RawDescriptionHelpFormatter,
