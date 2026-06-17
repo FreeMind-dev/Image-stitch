@@ -10,16 +10,18 @@
 """
 
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, messagebox
 from typing import List, Optional
 from pathlib import Path
-from PIL import Image, ImageTk
+from PIL import Image
 
 from ..core.image_loader import ImageLoader, ImageInfo
 from ..core.cropper import CropBox
 from .crop_dialog import CropDialog
+from .file_dialogs import ask_open_filenames
 from .stitch_dialog import StitchDialog
 from .theme import COLORS, FONTS, SIZES, setup_styles
+from .tk_images import pil_to_photo_image
 
 
 class ImageStitchGUI:
@@ -64,11 +66,11 @@ class ImageStitchGUI:
         # 数据
         self.loader = ImageLoader()
         self.image_infos: List[ImageInfo] = []
-        self.preview_image: Optional[ImageTk.PhotoImage] = None
+        self.preview_image: Optional[tk.PhotoImage] = None
 
         # 动画播放状态
         self.animation_id: Optional[str] = None
-        self.animation_frames: List[ImageTk.PhotoImage] = []
+        self.animation_frames: List[tk.PhotoImage] = []
         self.animation_durations: List[int] = []
         self.current_frame_idx: int = 0
 
@@ -245,7 +247,7 @@ class ImageStitchGUI:
 
     def _add_images(self):
         """添加图片"""
-        files = filedialog.askopenfilenames(
+        files = ask_open_filenames(
             title="Select Images",
             filetypes=self.SUPPORTED_FORMATS,
         )
@@ -463,14 +465,14 @@ class ImageStitchGUI:
             self.animation_frames = []
             for frame in info.frames:
                 scaled = self._scale_preview_frame(frame.copy())
-                self.animation_frames.append(ImageTk.PhotoImage(scaled))
+                self.animation_frames.append(pil_to_photo_image(scaled, master=self.root))
             self.animation_durations = info.durations.copy()
             self.current_frame_idx = 0
             self._play_animation()
         else:
             # 静态图：显示单帧
             frame = self._scale_preview_frame(info.frames[0].copy())
-            self.preview_image = ImageTk.PhotoImage(frame)
+            self.preview_image = pil_to_photo_image(frame, master=self.root)
             self.preview_canvas.delete("all")
             self.preview_canvas.create_image(
                 canvas_w // 2,

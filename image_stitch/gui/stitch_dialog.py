@@ -10,16 +10,18 @@
 """
 
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, messagebox
 from typing import List, Optional
 from pathlib import Path
-from PIL import Image, ImageTk
+from PIL import Image
 
 from ..core.image_loader import ImageInfo
 from ..core.stitcher import ImageStitcher, HeightMode, Direction, StitchResult
 from ..core.exporter import Exporter, OutputFormat
 from ..core.frame_sync import SyncMode
+from .file_dialogs import ask_save_as_filename
 from .theme import COLORS, FONTS, SIZES
+from .tk_images import pil_to_photo_image
 
 
 class StitchDialog(tk.Toplevel):
@@ -59,7 +61,7 @@ class StitchDialog(tk.Toplevel):
         self.check_canvases: List[tk.Canvas] = []
 
         # 缩略图相关
-        self.thumbnails: List[ImageTk.PhotoImage] = []
+        self.thumbnails: List[tk.PhotoImage] = []
         self.selected_order: List[int] = []
         self.drag_data = {"item": None, "x": 0, "start_idx": None}
 
@@ -68,10 +70,10 @@ class StitchDialog(tk.Toplevel):
 
         # 动画播放状态
         self.stitch_animation_id: Optional[str] = None
-        self.stitch_animation_frames: List[ImageTk.PhotoImage] = []
+        self.stitch_animation_frames: List[tk.PhotoImage] = []
         self.stitch_animation_durations: List[int] = []
         self.stitch_current_frame_idx: int = 0
-        self.preview_image: Optional[ImageTk.PhotoImage] = None
+        self.preview_image: Optional[tk.PhotoImage] = None
 
         # 导出设置变量
         self.height_mode_var = tk.StringVar(value="max")
@@ -306,7 +308,6 @@ class StitchDialog(tk.Toplevel):
             bg=COLORS["panel"],
             highlightthickness=1,
             highlightbackground=COLORS["border"],
-            cursor="hand2"
         )
         check_canvas.pack(side=tk.LEFT, padx=(4, 8))
         self.check_canvases.append(check_canvas)
@@ -320,9 +321,7 @@ class StitchDialog(tk.Toplevel):
         anim_str = f" ({info.n_frames}f)" if info.is_animated else ""
         display_text = f"{name}{anim_str}"
 
-        name_label = ttk.Label(
-            row_frame, text=display_text, cursor="hand2", style="Small.TLabel"
-        )
+        name_label = ttk.Label(row_frame, text=display_text, style="Small.TLabel")
         name_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
         name_label.bind("<Button-1>", lambda e, i=idx: self._toggle_check(i))
 
@@ -385,7 +384,7 @@ class StitchDialog(tk.Toplevel):
             else:
                 thumb.paste(frame, (x, y))
 
-            self.thumbnails.append(ImageTk.PhotoImage(thumb))
+            self.thumbnails.append(pil_to_photo_image(thumb, master=self))
 
         self._draw_thumbnails()
 
@@ -545,7 +544,7 @@ class StitchDialog(tk.Toplevel):
         self.stitch_animation_frames = []
         for frame in self.stitch_result.frames:
             scaled = self._scale_frame(frame, canvas_w, canvas_h)
-            self.stitch_animation_frames.append(ImageTk.PhotoImage(scaled))
+            self.stitch_animation_frames.append(pil_to_photo_image(scaled, master=self))
 
         self.stitch_animation_durations = self.stitch_result.durations.copy()
         self.stitch_current_frame_idx = 0
@@ -561,7 +560,7 @@ class StitchDialog(tk.Toplevel):
         canvas_h = self.preview_canvas.winfo_height() or self.PREVIEW_MAX_HEIGHT
 
         frame = self._scale_frame(self.stitch_result.frames[0], canvas_w, canvas_h)
-        self.preview_image = ImageTk.PhotoImage(frame)
+        self.preview_image = pil_to_photo_image(frame, master=self)
 
         self.preview_canvas.delete("all")
         self.preview_canvas.create_image(
@@ -627,7 +626,7 @@ class StitchDialog(tk.Toplevel):
             ext = ".png"
             filetypes = [("PNG Files", "*.png"), ("All Files", "*.*")]
 
-        output_path = filedialog.asksaveasfilename(
+        output_path = ask_save_as_filename(
             title="Save As",
             defaultextension=ext,
             filetypes=filetypes,

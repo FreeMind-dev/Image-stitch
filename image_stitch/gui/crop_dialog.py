@@ -10,15 +10,17 @@
 """
 
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, messagebox
 from typing import List, Optional, Callable
 from pathlib import Path
-from PIL import Image, ImageTk
+from PIL import Image
 
 from ..core.image_loader import ImageInfo
 from ..core.cropper import ImageCropper, CropBox
 from ..core.exporter import Exporter
+from .file_dialogs import ask_save_as_filename
 from .theme import COLORS, FONTS, SIZES
+from .tk_images import pil_to_photo_image
 
 
 class CropDialog(tk.Toplevel):
@@ -96,12 +98,12 @@ class CropDialog(tk.Toplevel):
 
         # 动画播放状态
         self.crop_animation_id: Optional[str] = None
-        self.crop_animation_frames: List[ImageTk.PhotoImage] = []
+        self.crop_animation_frames: List[tk.PhotoImage] = []
         self.crop_animation_durations: List[int] = []
         self.crop_current_frame_idx: int = 0
 
         # 静态图片显示引用（防止被垃圾回收）
-        self.display_image: Optional[ImageTk.PhotoImage] = None
+        self.display_image: Optional[tk.PhotoImage] = None
 
         self._setup_window()
         self._create_widgets()
@@ -152,7 +154,6 @@ class CropDialog(tk.Toplevel):
             bg="#2D3748",
             highlightthickness=1,
             highlightbackground=COLORS["border"],
-            cursor="crosshair"
         )
         self.canvas.pack()
 
@@ -207,7 +208,7 @@ class CropDialog(tk.Toplevel):
                 if self.scale < 1.0:
                     new_size = (int(frame.width * self.scale), int(frame.height * self.scale))
                     frame = frame.resize(new_size, Image.Resampling.LANCZOS)
-                self.crop_animation_frames.append(ImageTk.PhotoImage(frame))
+                self.crop_animation_frames.append(pil_to_photo_image(frame, master=self))
             self.crop_animation_durations = self.image_info.durations.copy()
             self.crop_current_frame_idx = 0
             self._play_crop_animation()
@@ -219,7 +220,7 @@ class CropDialog(tk.Toplevel):
             if self.scale < 1.0:
                 new_size = (int(frame.width * self.scale), int(frame.height * self.scale))
                 frame = frame.resize(new_size, Image.Resampling.LANCZOS)
-            self.display_image = ImageTk.PhotoImage(frame)
+            self.display_image = pil_to_photo_image(frame, master=self)
             self.canvas.create_image(0, 0, anchor=tk.NW, image=self.display_image, tags="bg_image")
 
     def _play_crop_animation(self):
@@ -312,6 +313,9 @@ class CropDialog(tk.Toplevel):
 
     def _update_cursor(self, mode: str):
         """根据模式更新鼠标光标"""
+        if not self._cursor_updates_enabled():
+            return
+
         cursor_map = {
             self.MODE_NONE: "crosshair",
             self.MODE_CREATE: "crosshair",
@@ -326,6 +330,10 @@ class CropDialog(tk.Toplevel):
             self.MODE_RESIZE_SE: "bottom_right_corner",
         }
         self.canvas.config(cursor=cursor_map.get(mode, "crosshair"))
+
+    def _cursor_updates_enabled(self) -> bool:
+        """Return whether Tk cursor updates are safe in this process."""
+        return self.tk.call("tk", "windowingsystem") != "x11"
 
     def _on_motion(self, event):
         """鼠标悬停"""
@@ -466,27 +474,26 @@ class CropDialog(tk.Toplevel):
     def _draw_overlay(self, x1: int, y1: int, x2: int, y2: int):
         """绘制半透明遮罩"""
         overlay_color = COLORS["overlay"]
-        stipple = "gray50"
 
         if y1 > 0:
             self.canvas.create_rectangle(
                 0, 0, self.canvas_w, y1,
-                fill=overlay_color, stipple=stipple, outline="", tags="overlay"
+                fill=overlay_color, outline="", tags="overlay"
             )
         if y2 < self.canvas_h:
             self.canvas.create_rectangle(
                 0, y2, self.canvas_w, self.canvas_h,
-                fill=overlay_color, stipple=stipple, outline="", tags="overlay"
+                fill=overlay_color, outline="", tags="overlay"
             )
         if x1 > 0:
             self.canvas.create_rectangle(
                 0, y1, x1, y2,
-                fill=overlay_color, stipple=stipple, outline="", tags="overlay"
+                fill=overlay_color, outline="", tags="overlay"
             )
         if x2 < self.canvas_w:
             self.canvas.create_rectangle(
                 x2, y1, self.canvas_w, y2,
-                fill=overlay_color, stipple=stipple, outline="", tags="overlay"
+                fill=overlay_color, outline="", tags="overlay"
             )
 
     def _update_info(self):
@@ -604,7 +611,7 @@ class CropDialog(tk.Toplevel):
             ("All Files", "*.*"),
         ]
 
-        save_path = filedialog.asksaveasfilename(
+        save_path = ask_save_as_filename(
             title="Save Cropped Image As",
             initialdir=original_path.parent,
             initialfile=default_name,
